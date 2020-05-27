@@ -3,9 +3,7 @@ const app = express();
 const cors = require("cors");
 const logger = require("morgan");
 
-let count = 0;
-
-let chat = [];
+const Deck = require("./lib/deck");
 
 app.use(cors());
 app.use(express.json());
@@ -14,33 +12,45 @@ app.use(logger("dev"));
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 
-function formatMessage(message) {
-  let obj = {
-    timeCreated: new Date(),
-    message: message,
-  };
-  return obj;
+let deck = null;
+let count = 0;
+let clients = [];
+
+function dealToClients(clients) {
+  deck = new Deck();
+  let cL = clients.length;
+
+  let cards = deck.dealToPlayers(cL);
+
+  clients.forEach((clientID, index) => {
+    console.log("DEAL");
+    console.log(cards[index]);
+    io.to(clientID).emit("receiveHand", cards[index]);
+  });
 }
 
-setInterval(() => {
-  io.emit("beep", new Date());
-}, 10000);
+function playGame() {
+  io.clients((e, clientsArr) => {
+    if (e) throw e;
+    dealToClients(clientsArr);
+  });
+}
 
 io.on("connection", (socket) => {
   count++;
   console.log("new connection", count);
-  io.emit("chatHX", { list: chat });
+
+  socket.on("newGame", () => {
+    playGame();
+  });
+
   socket.on("sub", (p) => {
     console.log("new sub");
   });
 
-  socket.on("chat", (payload) => {
-    chat.push(formatMessage(payload.message));
-    io.emit("chatHX", { list: chat });
-  });
-
   socket.on("disconnect", (p) => {
     count--;
+    clients = [];
     console.log("close", count);
   });
 });
